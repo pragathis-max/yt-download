@@ -136,11 +136,34 @@ export default function DashboardView({
 
     try {
       const res = await fetch(`${endpoint}?url=${encodeURIComponent(url)}`);
+      let errMsg = "Failed to analyze URL.";
+      
       if (!res.ok) {
-        const errData = await res.json();
-        throw new Error(errData.error || "Failed to analyze URL.");
+        try {
+          const contentType = res.headers.get("content-type");
+          if (contentType && contentType.includes("application/json")) {
+            const errData = await res.json();
+            errMsg = errData.error || errMsg;
+          } else {
+            const textMsg = await res.text();
+            if (textMsg && textMsg.length < 500) {
+              errMsg = textMsg;
+            } else {
+              errMsg = `Server returned an error status (${res.status}): ${res.statusText || "Internal Error"}`;
+            }
+          }
+        } catch (parseErr) {
+          errMsg = `Server error (${res.status}): ${res.statusText || "Internal Error"}`;
+        }
+        throw new Error(errMsg);
       }
-      const data = await res.json();
+
+      let data;
+      try {
+        data = await res.json();
+      } catch (jsonErr) {
+        throw new Error("The server responded with invalid data. Please try again.");
+      }
       setCurrentVideo(data);
     } catch (err: any) {
       setError(err.message || "An error occurred while communicating with the server.");
