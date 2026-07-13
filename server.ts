@@ -315,6 +315,8 @@ app.get("/api/info", (req, res) => {
           userFriendlyError = "Invalid YouTube URL.";
         } else if (cleanedStderr.includes("Private video")) {
           userFriendlyError = "This is a private video and cannot be downloaded.";
+        } else if (cleanedStderr.includes("The page could not be found") || cleanedStderr.includes("NOT_FOUND") || cleanedStderr.includes("not found")) {
+          userFriendlyError = "The requested video could not be found. Please make sure the URL is correct and the video is public.";
         } else if (isCookieInvalid) {
           userFriendlyError = "Your YouTube cookies have expired or been rotated. Please open YouTube in your browser, export brand-new cookies, paste them in the Settings tab, and click Save.";
         } else if (cleanedStderr.includes("Sign in to confirm your age")) {
@@ -463,6 +465,8 @@ app.get("/api/playlist-info", (req, res) => {
           userFriendlyError = "Invalid YouTube URL.";
         } else if (cleanedStderr.includes("Private video")) {
           userFriendlyError = "This is a private playlist and cannot be parsed.";
+        } else if (cleanedStderr.includes("The page could not be found") || cleanedStderr.includes("NOT_FOUND") || cleanedStderr.includes("not found")) {
+          userFriendlyError = "The requested playlist could not be found. Please make sure the URL is correct and the playlist is public.";
         } else if (isCookieInvalid) {
           userFriendlyError = "Your YouTube cookies have expired or been rotated. Please open YouTube in your browser, export brand-new cookies, paste them in the Settings tab, and click Save.";
         } else if (cleanedStderr.includes("Sign in to confirm your age")) {
@@ -843,8 +847,10 @@ app.post("/api/download", (req, res) => {
           downloadItem.speed = "Error";
           
           let userFriendlyError = "Process failed. Quality might be unavailable or network cut.";
-
-          if (isCookieInvalid) {
+          
+          if (cleanedStderr.includes("The page could not be found") || cleanedStderr.includes("NOT_FOUND") || cleanedStderr.includes("not found")) {
+            userFriendlyError = "The requested video or playlist could not be found. Please check if the URL is correct and public.";
+          } else if (isCookieInvalid) {
             userFriendlyError = "Your YouTube cookies have expired or been rotated. Please open YouTube in your browser, export brand-new cookies, paste them in the Settings tab, and click Save.";
           } else if (cleanedStderr.includes("confirm you’re not a bot") || cleanedStderr.includes("confirm you're not a bot") || cleanedStderr.includes("Sign in to confirm")) {
             userFriendlyError = "YouTube is requesting bot verification. Please go to the Settings tab and paste your Netscape-format YouTube cookies.";
