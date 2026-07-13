@@ -27,9 +27,11 @@ import {
   Sliders,
   ShieldCheck,
   Database,
-  ListVideo
+  ListVideo,
+  Settings,
+  Shield
 } from "lucide-react";
-import { VideoMetadata, DownloadItem, UserSettings, FormatInfo } from "../types.js";
+import { VideoMetadata, DownloadItem, UserSettings, FormatInfo, SystemStatus } from "../types.js";
 
 interface DashboardViewProps {
   settings: UserSettings;
@@ -37,6 +39,8 @@ interface DashboardViewProps {
   currentVideo: VideoMetadata | null;
   setCurrentVideo: (video: VideoMetadata | null) => void;
   setCurrentTab: (tab: string) => void;
+  systemStatus: SystemStatus | null;
+  backendOffline: boolean;
 }
 
 export default function DashboardView({
@@ -44,7 +48,9 @@ export default function DashboardView({
   activeDownloads,
   currentVideo,
   setCurrentVideo,
-  setCurrentTab
+  setCurrentTab,
+  systemStatus,
+  backendOffline
 }: DashboardViewProps) {
   const [urlInput, setUrlInput] = useState("");
   const [analyzing, setAnalyzing] = useState(false);
@@ -275,6 +281,80 @@ export default function DashboardView({
   return (
     <div id="dashboard-view" className="space-y-6 max-w-5xl mx-auto py-2">
       
+      {/* Stateless/Serverless (Vercel) Deployment Warn Banner */}
+      {(backendOffline || (systemStatus && !systemStatus.ytDlpInstalled)) && (
+        <div id="vercel-serverless-warning" className="bg-amber-950/25 border border-amber-500/30 rounded-3xl p-6 space-y-4 animate-fadeIn text-amber-200">
+          <div className="flex items-start gap-4">
+            <div className="p-3 bg-amber-500/10 border border-amber-500/25 rounded-2xl text-amber-400 flex-shrink-0">
+              <AlertCircle className="w-6 h-6" />
+            </div>
+            <div className="space-y-1.5 flex-1">
+              <h3 className="text-base font-semibold text-amber-100 flex items-center gap-2">
+                Hosting Compatibility Mode Active (Serverless / Static Environment)
+              </h3>
+              <p className="text-sm text-zinc-300 leading-relaxed">
+                {backendOffline ? (
+                  <>
+                    We detected that this application is hosted as a <strong>static frontend (or on Vercel without a configured API route)</strong>. 
+                    The Express backend service is offline, which means media extraction, cookies processing, and downloads will not work.
+                  </>
+                ) : (
+                  <>
+                    We detected that this server is running in a <strong>Serverless Environment (like Vercel)</strong>. 
+                    Serverless platforms are stateless, read-only, have short timeouts, and lack the custom CLI dependencies (<code>yt-dlp</code> and <code>ffmpeg</code>) required to download and transcode video/audio.
+                  </>
+                )}
+              </p>
+            </div>
+          </div>
+
+          <div className="pl-0 sm:pl-14 grid grid-cols-1 md:grid-cols-2 gap-4 pt-2">
+            <div className="bg-[#1E1914] border border-amber-500/10 rounded-2xl p-4 space-y-2">
+              <span className="text-xs font-mono font-bold text-amber-400 uppercase tracking-wider block">Option A: Running Locally (Recommended)</span>
+              <p className="text-xs text-zinc-400 leading-relaxed">
+                Download/clone this code, make sure you have <code className="text-zinc-200 font-semibold">Node.js</code>, <code className="text-zinc-200 font-semibold">yt-dlp</code>, and <code className="text-zinc-200 font-semibold">ffmpeg</code> installed, and run:
+              </p>
+              <div className="bg-black/40 px-3 py-2 rounded-lg font-mono text-[11px] text-zinc-300 border border-zinc-800 select-all">
+                npm run dev
+              </div>
+            </div>
+
+            <div className="bg-[#1E1914] border border-amber-500/10 rounded-2xl p-4 space-y-2">
+              <span className="text-xs font-mono font-bold text-amber-400 uppercase tracking-wider block">Option B: Deploy to a Full-Stack Host</span>
+              <p className="text-xs text-zinc-400 leading-relaxed">
+                To run this app in the cloud, deploy it as a persistent full-stack docker container or VM where background tasks can run without timeouts:
+              </p>
+              <div className="flex flex-wrap gap-2 pt-1">
+                <a 
+                  href="https://render.com" 
+                  target="_blank" 
+                  rel="noopener noreferrer"
+                  className="px-3 py-1.5 bg-[#FF4F12]/10 hover:bg-[#FF4F12]/20 border border-[#FF4F12]/20 rounded-xl text-xs font-semibold text-white transition-all flex items-center gap-1 cursor-pointer"
+                >
+                  Deploy to Render ↗
+                </a>
+                <a 
+                  href="https://railway.app" 
+                  target="_blank" 
+                  rel="noopener noreferrer"
+                  className="px-3 py-1.5 bg-[#0B0D0E] hover:bg-zinc-800 border border-zinc-700 rounded-xl text-xs font-semibold text-white transition-all flex items-center gap-1 cursor-pointer"
+                >
+                  Deploy to Railway ↗
+                </a>
+                <a 
+                  href="https://cloud.google.com/run" 
+                  target="_blank" 
+                  rel="noopener noreferrer"
+                  className="px-3 py-1.5 bg-blue-600/10 hover:bg-blue-600/20 border border-blue-500/20 rounded-xl text-xs font-semibold text-white transition-all flex items-center gap-1 cursor-pointer"
+                >
+                  Google Cloud Run ↗
+                </a>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Dynamic Alert Banner */}
       {error && (
         <div id="dashboard-error-banner" className="bg-red-950/20 border border-red-900 rounded-2xl p-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 text-red-200 animate-fadeIn">
@@ -292,6 +372,73 @@ export default function DashboardView({
               Configure Cookies
             </button>
           )}
+        </div>
+      )}
+
+      {/* Bot Detection & Sign-In Help Assistant Card */}
+      {error && (error.toLowerCase().includes("cookies") || error.toLowerCase().includes("bot") || error.toLowerCase().includes("sign in")) && (
+        <div id="cookies-bypass-helper" className="bg-zinc-900/50 border border-red-500/20 rounded-3xl p-6 space-y-5 animate-fadeIn">
+          <div className="flex items-start gap-4">
+            <div className="p-3 bg-red-500/10 border border-red-500/20 rounded-2xl text-red-400 flex-shrink-0">
+              <Shield className="w-6 h-6" />
+            </div>
+            <div className="space-y-1">
+              <h3 className="text-base font-semibold text-zinc-100">
+                Why YouTube Blocks Requests & How to Bypass It
+              </h3>
+              <p className="text-sm text-zinc-400 leading-relaxed">
+                Because this application runs on a cloud server/datacenter IP address, YouTube detects automated activity and demands cookie-based browser verification (bot check). You can easily bypass this by pasting your browser session's YouTube cookies.
+              </p>
+            </div>
+          </div>
+
+          <div className="border-t border-zinc-800/80 pt-4 space-y-4">
+            <h4 className="text-xs font-bold uppercase tracking-wider text-red-400">
+              3-Step Solution: Get Your Cookies in 1 Minute
+            </h4>
+            
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div className="bg-zinc-950/40 border border-zinc-800 p-4 rounded-2xl space-y-2">
+                <div className="flex items-center gap-2">
+                  <span className="flex items-center justify-center w-5 h-5 rounded-full bg-red-500/10 text-red-400 text-xs font-bold border border-red-500/20">1</span>
+                  <span className="text-xs font-bold text-zinc-200">Open YouTube</span>
+                </div>
+                <p className="text-xs text-zinc-400 leading-relaxed">
+                  Go to <a href="https://www.youtube.com" target="_blank" rel="noopener noreferrer" className="text-red-400 hover:underline">youtube.com ↗</a> in your browser where you are logged into your account.
+                </p>
+              </div>
+
+              <div className="bg-zinc-950/40 border border-zinc-800 p-4 rounded-2xl space-y-2">
+                <div className="flex items-center gap-2">
+                  <span className="flex items-center justify-center w-5 h-5 rounded-full bg-red-500/10 text-red-400 text-xs font-bold border border-red-500/20">2</span>
+                  <span className="text-xs font-bold text-zinc-200">Copy Cookie Header</span>
+                </div>
+                <p className="text-xs text-zinc-400 leading-relaxed">
+                  Press <kbd className="px-1.5 py-0.5 bg-zinc-800 border border-zinc-700 rounded text-[10px] text-zinc-300">F12</kbd> (DevTools) &rarr; Network. Refresh the page, click any request to <code className="text-zinc-300">youtube.com</code>, and copy the value of the <strong className="text-red-400 font-mono">Cookie:</strong> Request Header.
+                </p>
+              </div>
+
+              <div className="bg-zinc-950/40 border border-zinc-800 p-4 rounded-2xl space-y-2">
+                <div className="flex items-center gap-2">
+                  <span className="flex items-center justify-center w-5 h-5 rounded-full bg-red-500/10 text-red-400 text-xs font-bold border border-red-500/20">3</span>
+                  <span className="text-xs font-bold text-zinc-200">Paste & Save</span>
+                </div>
+                <p className="text-xs text-zinc-400 leading-relaxed">
+                  Click the button below, paste your copied text into the cookies box in Settings, and hit "Save Configuration".
+                </p>
+              </div>
+            </div>
+
+            <div className="flex justify-end pt-2">
+              <button
+                onClick={() => setCurrentTab("settings")}
+                className="px-5 py-2.5 bg-red-600 hover:bg-red-700 text-white font-semibold text-xs rounded-xl flex items-center gap-2 transition-all cursor-pointer shadow-lg shadow-red-950/20"
+              >
+                <Settings className="w-4 h-4" />
+                Go to Settings & Apply Cookies
+              </button>
+            </div>
+          </div>
         </div>
       )}
 

@@ -103,3 +103,10 @@ export interface ChatMessage {
   timestamp: string;
   thinking?: string;
 }
+
+export interface SystemStatus {
+  ytDlpInstalled: boolean;
+  ffmpegInstalled: boolean;
+  isServerless: boolean;
+  platform: string;
+}

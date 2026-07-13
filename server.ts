@@ -1,12 +1,30 @@
 import express from "express";
 import path from "path";
 import fs from "fs";
-import { spawn, ChildProcess } from "child_process";
+import { spawn, ChildProcess, execSync } from "child_process";
 import { GoogleGenAI, ThinkingLevel } from "@google/genai";
 import dotenv from "dotenv";
 import { VideoMetadata, DownloadItem, HistoryRecord, UserSettings, FormatInfo } from "./src/types.js";
 
 dotenv.config();
+
+// Binary capability detection
+let isYtDlpInstalled = false;
+let isFfmpegInstalled = false;
+
+try {
+  execSync("yt-dlp --version", { stdio: "ignore" });
+  isYtDlpInstalled = true;
+} catch (e) {
+  isYtDlpInstalled = false;
+}
+
+try {
+  execSync("ffmpeg -version", { stdio: "ignore" });
+  isFfmpegInstalled = true;
+} catch (e) {
+  isFfmpegInstalled = false;
+}
 
 const app = express();
 const PORT = 3000;
@@ -241,6 +259,16 @@ app.use(express.json());
 // API: Get settings
 app.get("/api/settings", (req, res) => {
   res.json(getSettings());
+});
+
+// API: Check system capabilities status for serverless environment alerts
+app.get("/api/system-status", (req, res) => {
+  res.json({
+    ytDlpInstalled: isYtDlpInstalled,
+    ffmpegInstalled: isFfmpegInstalled,
+    isServerless: !!process.env.VERCEL || !isYtDlpInstalled,
+    platform: process.env.VERCEL ? "Vercel Serverless" : "Server/Container"
+  });
 });
 
 // API: Save settings

@@ -9,7 +9,7 @@ import DashboardView from "./components/DashboardView.js";
 import HistoryView from "./components/HistoryView.js";
 import SettingsView from "./components/SettingsView.js";
 import AICompanionView from "./components/AICompanionView.js";
-import { UserSettings, VideoMetadata, DownloadItem } from "./types.js";
+import { UserSettings, VideoMetadata, DownloadItem, SystemStatus } from "./types.js";
 import { Info, Globe, HardDrive, Cpu, AlertCircle, RefreshCw } from "lucide-react";
 
 export default function App() {
@@ -17,6 +17,8 @@ export default function App() {
   const [currentVideo, setCurrentVideo] = useState<VideoMetadata | null>(null);
   const [activeDownloads, setActiveDownloads] = useState<DownloadItem[]>([]);
   const completedIdsRef = useRef<Set<string>>(new Set());
+  const [systemStatus, setSystemStatus] = useState<SystemStatus | null>(null);
+  const [backendOffline, setBackendOffline] = useState<boolean>(false);
   const [settings, setSettings] = useState<UserSettings>({
     theme: "dark",
     defaultQuality: "1080p",
@@ -28,7 +30,7 @@ export default function App() {
     fallbackNearest: true,
   });
 
-  // Load Settings on startup
+  // Load Settings and System Status on startup
   useEffect(() => {
     fetch("/api/settings")
       .then((res) => {
@@ -36,7 +38,29 @@ export default function App() {
         return res.json();
       })
       .then((data) => setSettings(data))
-      .catch((err) => console.error("Failed to load settings:", err));
+      .catch((err) => {
+        console.error("Failed to load settings (backend likely offline):", err);
+        setBackendOffline(true);
+      });
+
+    fetch("/api/system-status")
+      .then((res) => {
+        if (!res.ok) {
+          if (res.status === 404) {
+            setBackendOffline(true);
+          }
+          throw new Error("System status endpoint returned " + res.status);
+        }
+        return res.json();
+      })
+      .then((data) => {
+        setSystemStatus(data);
+        setBackendOffline(false);
+      })
+      .catch((err) => {
+        console.warn("Could not retrieve system status (backend likely static/offline):", err);
+        setBackendOffline(true);
+      });
   }, []);
 
   // SSE Real-time Active Downloads stream listener
@@ -153,6 +177,8 @@ export default function App() {
               currentVideo={currentVideo}
               setCurrentVideo={setCurrentVideo}
               setCurrentTab={setCurrentTab}
+              systemStatus={systemStatus}
+              backendOffline={backendOffline}
             />
           )}
 
