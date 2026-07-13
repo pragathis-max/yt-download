@@ -2,7 +2,6 @@ import express from "express";
 import path from "path";
 import fs from "fs";
 import { spawn, ChildProcess } from "child_process";
-import { createServer as createViteServer } from "vite";
 import { GoogleGenAI, ThinkingLevel } from "@google/genai";
 import dotenv from "dotenv";
 import { VideoMetadata, DownloadItem, HistoryRecord, UserSettings, FormatInfo } from "./src/types.js";
@@ -23,18 +22,37 @@ const ai = new GoogleGenAI({
 });
 
 // Paths for persistence
-const DATA_DIR = path.join(process.cwd(), "data");
-const DOWNLOADS_DIR = path.join(DATA_DIR, "downloads");
-const HISTORY_FILE = path.join(DATA_DIR, "history.json");
-const SETTINGS_FILE = path.join(DATA_DIR, "settings.json");
-const COOKIES_FILE = path.join(DATA_DIR, "cookies.txt");
+let DATA_DIR = path.join(process.cwd(), "data");
+let DOWNLOADS_DIR = path.join(DATA_DIR, "downloads");
+let HISTORY_FILE = path.join(DATA_DIR, "history.json");
+let SETTINGS_FILE = path.join(DATA_DIR, "settings.json");
+let COOKIES_FILE = path.join(DATA_DIR, "cookies.txt");
 
 // Ensure directories exist
-if (!fs.existsSync(DATA_DIR)) {
-  fs.mkdirSync(DATA_DIR, { recursive: true });
-}
-if (!fs.existsSync(DOWNLOADS_DIR)) {
-  fs.mkdirSync(DOWNLOADS_DIR, { recursive: true });
+try {
+  if (!fs.existsSync(DATA_DIR)) {
+    fs.mkdirSync(DATA_DIR, { recursive: true });
+  }
+  if (!fs.existsSync(DOWNLOADS_DIR)) {
+    fs.mkdirSync(DOWNLOADS_DIR, { recursive: true });
+  }
+} catch (err) {
+  console.warn("Unable to create data directories in current working directory. Falling back to /tmp/data for serverless environments:", err);
+  DATA_DIR = "/tmp/data";
+  DOWNLOADS_DIR = path.join(DATA_DIR, "downloads");
+  HISTORY_FILE = path.join(DATA_DIR, "history.json");
+  SETTINGS_FILE = path.join(DATA_DIR, "settings.json");
+  COOKIES_FILE = path.join(DATA_DIR, "cookies.txt");
+  try {
+    if (!fs.existsSync(DATA_DIR)) {
+      fs.mkdirSync(DATA_DIR, { recursive: true });
+    }
+    if (!fs.existsSync(DOWNLOADS_DIR)) {
+      fs.mkdirSync(DOWNLOADS_DIR, { recursive: true });
+    }
+  } catch (tmpErr) {
+    console.error("Failed to create fallback temporary directories:", tmpErr);
+  }
 }
 
 // In-memory state for active downloads
@@ -271,6 +289,7 @@ app.get("/api/info", (req, res) => {
 
     let stdoutData = "";
     let stderrData = "";
+    let handled = false;
 
     ytDlp.stdout.on("data", (data) => {
       stdoutData += data.toString();
@@ -280,7 +299,20 @@ app.get("/api/info", (req, res) => {
       stderrData += data.toString();
     });
 
+    ytDlp.on("error", (err: any) => {
+      if (handled) return;
+      handled = true;
+      console.error("yt-dlp info spawn error:", err);
+      let errMsg = "Failed to run yt-dlp on the server. Please ensure yt-dlp is installed and in the system's PATH.";
+      if (err.code === "ENOENT") {
+        errMsg = "The yt-dlp binary was not found on this server. If you deployed this application on Vercel, please note that Vercel is a stateless, serverless environment that does not support running custom CLI binaries or background Python processes like yt-dlp. Please deploy this application to a persistent container/VM platform like Google Cloud Run, Railway, Render, or a VPS.";
+      }
+      res.status(500).json({ error: errMsg, details: err.message });
+    });
+
     ytDlp.on("close", (code) => {
+      if (handled) return;
+      handled = true;
       const cleanedStderr = stderrData
         .split("\n")
         .filter(line => !line.includes("Support for Python version 3.10 has been deprecated") && !line.includes("Deprecated Feature: Support for Python"))
@@ -421,6 +453,7 @@ app.get("/api/playlist-info", (req, res) => {
 
     let stdoutData = "";
     let stderrData = "";
+    let handled = false;
 
     ytDlp.stdout.on("data", (data) => {
       stdoutData += data.toString();
@@ -430,7 +463,20 @@ app.get("/api/playlist-info", (req, res) => {
       stderrData += data.toString();
     });
 
+    ytDlp.on("error", (err: any) => {
+      if (handled) return;
+      handled = true;
+      console.error("yt-dlp playlist spawn error:", err);
+      let errMsg = "Failed to run yt-dlp on the server. Please ensure yt-dlp is installed and in the system's PATH.";
+      if (err.code === "ENOENT") {
+        errMsg = "The yt-dlp binary was not found on this server. If you deployed this application on Vercel, please note that Vercel is a stateless, serverless environment that does not support running custom CLI binaries or background Python processes like yt-dlp. Please deploy this application to a persistent container/VM platform like Google Cloud Run, Railway, Render, or a VPS.";
+      }
+      res.status(500).json({ error: errMsg, details: err.message });
+    });
+
     ytDlp.on("close", (code) => {
+      if (handled) return;
+      handled = true;
       const cleanedStderr = stderrData
         .split("\n")
         .filter(line => !line.includes("Support for Python version 3.10 has been deprecated") && !line.includes("Deprecated Feature: Support for Python"))
@@ -686,6 +732,36 @@ app.post("/api/download", (req, res) => {
     activeProcesses.set(id, proc);
 
     let outputBuffer = "";
+    let downloadHandled = false;
+
+    proc.on("error", (err: any) => {
+      if (downloadHandled) return;
+      downloadHandled = true;
+      console.error("yt-dlp download spawn error:", err);
+      downloadItem.status = 'failed';
+      downloadItem.speed = "Error";
+      let errMsg = "Process failed. Please ensure yt-dlp is installed and in the system's PATH on the server.";
+      if (err.code === "ENOENT") {
+        errMsg = "The yt-dlp binary was not found. Serverless hosting platforms like Vercel do not support running CLI binaries or background Python processes like yt-dlp. Please deploy on Google Cloud Run, Railway, or Render.";
+      }
+      downloadItem.error = errMsg;
+      notifyProgressClients();
+
+      const history = getHistory();
+      history.unshift({
+        id,
+        url,
+        title,
+        thumbnail,
+        date: new Date().toLocaleDateString(),
+        folder: DOWNLOADS_DIR,
+        quality: resolution,
+        format,
+        status: 'failed',
+        size: "0 B"
+      });
+      saveHistory(history);
+    });
 
     proc.stdout.on("data", (data) => {
       const chunk = data.toString();
@@ -766,6 +842,8 @@ app.post("/api/download", (req, res) => {
     });
 
     proc.on("close", (code) => {
+      if (downloadHandled) return;
+      downloadHandled = true;
       activeProcesses.delete(id);
       
       if (code === 0) {
@@ -1031,7 +1109,8 @@ Please respond thoroughly. Use your high-reasoning capability (Thinking Mode is 
 
 // Vite Middleware & SPA serving
 async function startServer() {
-  if (process.env.NODE_ENV !== "production") {
+  if (process.env.NODE_ENV !== "production" && !process.env.VERCEL) {
+    const { createServer: createViteServer } = await import("vite");
     const vite = await createViteServer({
       server: { middlewareMode: true },
       appType: "spa",
@@ -1050,4 +1129,8 @@ async function startServer() {
   });
 }
 
-startServer();
+if (!process.env.VERCEL) {
+  startServer();
+}
+
+export default app;
