@@ -1,0 +1,6 @@
+{
+  "name": "YouTube Video Downloader",
+  "description": "A professional full-stack web application and Python desktop suite for downloading YouTube videos, playlists, and audio with smart quality selection, metadata embedding, and real-time speed tracking.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
